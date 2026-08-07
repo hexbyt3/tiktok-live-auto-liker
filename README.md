@@ -1,3 +1,5 @@
+<img src="docs/icon.png" width="120" align="right" alt="">
+
 # TikTok Live Auto Liker
 
 A small Windows app that sends double-tap likes to a TikTok LIVE stream for you.

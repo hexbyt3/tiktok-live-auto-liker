@@ -31,6 +31,7 @@ sealed class MainForm : Form
     public MainForm()
     {
         Text = "TikTok Live Auto Liker";
+        LoadAppIcon();
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(1180, 840);
         MinimumSize = new Size(900, 620);
@@ -98,6 +99,15 @@ sealed class MainForm : Form
         _mute.CheckedChanged += (_, _) => ApplyMute();
         _intervalMin.ValueChanged += (_, _) => KeepOrdered(_intervalMin, _intervalMax);
         _intervalMax.ValueChanged += (_, _) => KeepOrdered(_intervalMin, _intervalMax);
+    }
+
+    void LoadAppIcon()
+    {
+        // Taken from the embedded .ico rather than the exe so the window and taskbar get the
+        // full set of sizes instead of a single scaled-up 32px frame.
+        using var stream = typeof(MainForm).Assembly
+            .GetManifestResourceStream("TikTokLiveAutoLiker.icon.ico");
+        if (stream is not null) Icon = new Icon(stream);
     }
 
     static void KeepOrdered(NumericUpDown min, NumericUpDown max)
