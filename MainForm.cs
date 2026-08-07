@@ -17,9 +17,11 @@ sealed class MainForm : Form
 
     readonly WebView2 _web = new() { Dock = DockStyle.Fill };
     readonly System.Windows.Forms.Timer _ticker = new() { Interval = 250 };
+    readonly System.Windows.Forms.Timer _saveDebounce = new() { Interval = 700 };
 
     TapEngine? _engine;
     long _startedAt;
+    bool _loading;
 
     TextBox _url = null!;
     Button _go = null!, _start = null!, _stop = null!, _test = null!;
@@ -96,9 +98,28 @@ sealed class MainForm : Form
         _start.Click += (_, _) => StartTapping();
         _stop.Click += (_, _) => _engine?.Stop();
         _test.Click += (_, _) => _ = TestOneAsync();
-        _mute.CheckedChanged += (_, _) => ApplyMute();
-        _intervalMin.ValueChanged += (_, _) => KeepOrdered(_intervalMin, _intervalMax);
-        _intervalMax.ValueChanged += (_, _) => KeepOrdered(_intervalMin, _intervalMax);
+
+        _mute.CheckedChanged += (_, _) => { ApplyMute(); SettingChanged(); };
+        _intervalMin.ValueChanged += (_, _) => { KeepOrdered(_intervalMin, _intervalMax); SettingChanged(); };
+        _intervalMax.ValueChanged += (_, _) => { KeepOrdered(_intervalMin, _intervalMax); SettingChanged(); };
+        _speed.SelectedIndexChanged += (_, _) => SettingChanged();
+        _maxTaps.ValueChanged += (_, _) => SettingChanged();
+        _idleBreaks.CheckedChanged += (_, _) => SettingChanged();
+        _url.TextChanged += (_, _) => SettingChanged();
+
+        _saveDebounce.Tick += (_, _) => { _saveDebounce.Stop(); SaveSettings(); };
+    }
+
+    /// <summary>
+    /// Pushes the change straight into a running session so nothing needs restarting, and
+    /// queues a save so the choice survives even if the app never gets a clean exit.
+    /// </summary>
+    void SettingChanged()
+    {
+        if (_loading) return;
+        if (_engine is { Running: true } engine) engine.Apply(CurrentSettings());
+        _saveDebounce.Stop();
+        _saveDebounce.Start();
     }
 
     void LoadAppIcon()
@@ -259,6 +280,7 @@ sealed class MainForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         _ticker.Stop();
+        _saveDebounce.Stop();
         _engine?.Stop();
         Native.UnregisterHotKey(Handle, HotkeyStart);
         Native.UnregisterHotKey(Handle, HotkeyStop);
@@ -270,6 +292,8 @@ sealed class MainForm : Form
 
     void LoadSettings()
     {
+        _loading = true;
+
         // Max first: the ordering handler would otherwise drag the min back down to meet it.
         _intervalMax.Value = 600;
         _intervalMin.Value = 250;
@@ -290,6 +314,10 @@ sealed class MainForm : Form
             _speed.SelectedIndex = Math.Clamp(s.Speed, 0, _speed.Items.Count - 1);
         }
         catch (Exception) { }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     void SaveSettings()

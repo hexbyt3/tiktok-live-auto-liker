@@ -62,7 +62,12 @@ Nothing about the output is on a fixed timer:
 | Occasional pauses | Adds the random multi-second breaks described above. |
 | Mute | Mutes the embedded stream. |
 
-Settings are saved to `%APPDATA%\TikTokLiveAutoLiker\settings.json` on exit.
+Every setting applies **live**. Change the speed or the interval while it's running and the next
+tap uses the new value — no stopping and starting. If it's part-way through a long rest when you
+shorten the interval, the rest is cut short so the change shows up straight away.
+
+Settings are written to `%APPDATA%\TikTokLiveAutoLiker\settings.json` as you change them, so they
+survive even if the app is killed rather than closed.
 
 ## Requirements
 

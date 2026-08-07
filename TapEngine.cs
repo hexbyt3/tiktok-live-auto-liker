@@ -65,7 +65,38 @@ sealed class TapEngine
         _ = LoopAsync(_cts.Token);
     }
 
+    /// <summary>
+    /// Swaps in new settings mid-run. The next tap uses them, and any rest currently being
+    /// waited out is cut short so a big interval change doesn't take a minute to show up.
+    /// </summary>
+    public void Apply(TapSettings settings)
+    {
+        _s = settings.Clone();
+        if (Running) _restBreaker?.Cancel();
+    }
+
     public void Stop() => _cts?.Cancel();
+
+    CancellationTokenSource? _restBreaker;
+
+    /// <summary>Rests, returning early if the settings changed underneath us.</summary>
+    async Task RestAsync(int ms, CancellationToken ct)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _restBreaker = linked;
+        try
+        {
+            await Task.Delay(ms, linked.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // settings changed; fall through to the next tap immediately
+        }
+        finally
+        {
+            _restBreaker = null;
+        }
+    }
 
     public async Task TapOnceAsync(TapSettings settings)
     {
@@ -127,7 +158,7 @@ sealed class TapEngine
                     wait += Rng.Int(1800, 6500);
                     Report(TapState.Resting, "Taking a short break");
                 }
-                await Task.Delay(wait, ct);
+                await RestAsync(wait, ct);
             }
         }
         catch (OperationCanceledException) { }
