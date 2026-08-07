@@ -1,33 +1,108 @@
+# Tag vX.Y.Z (matching <Version> in TikTokLiveAutoLiker.csproj) to cut a release.
+#
+# Velopack builds the update feed: Setup.exe for a normal install, a Portable zip for
+# people who don't want an installer, and the .nupkg + RELEASES the running app polls.
+#
+# The repo is public, so the shipped binary needs no token to check for updates and none
+# is baked into it. GITHUB_TOKEN here is only for uploading the release.
+
 name: release
 
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (without leading v)'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+
 jobs:
-  build:
+  release:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
 
-      - name: Publish
-        run: dotnet publish -c Release -o dist
-
-      - name: Package
+      - name: Resolve version
+        id: ver
         shell: pwsh
-        run: Compress-Archive -Path dist/TikTokLiveAutoLiker.exe -DestinationPath TikTokLiveAutoLiker-${{ github.ref_name }}.zip
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $v = '${{ inputs.version }}'
+          } else {
+            $v = '${{ github.ref_name }}' -replace '^v',''
+          }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Building release v$v"
 
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/TikTokLiveAutoLiker.exe
-            TikTokLiveAutoLiker-${{ github.ref_name }}.zip
-          generate_release_notes: true
+      - name: Install Velopack CLI
+        # Pinned to the same version as the Velopack PackageReference in the csproj —
+        # matching library and CLI versions is the only combination Velopack supports.
+        run: dotnet tool install -g vpk --version 1.2.0
+
+      - name: Download existing release feed
+        # Pulls the previous .nupkg + RELEASES so vpk builds onto the full history and can
+        # produce deltas. continue-on-error covers the first release, when there is none.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force releases | Out-Null
+          vpk download github `
+            --repoUrl https://github.com/${{ github.repository }} `
+            --token $env:GITHUB_TOKEN `
+            -o releases/
+
+      - name: Publish
+        # Velopack needs the folder layout, not a single-file bundle. Self-contained so the
+        # installed app carries its own runtime and users need nothing preinstalled.
+        shell: pwsh
+        run: |
+          dotnet publish TikTokLiveAutoLiker.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained `
+            -p:PublishSingleFile=false `
+            -p:Version=${{ steps.ver.outputs.version }} `
+            -o publish/
+
+      - name: Pack with Velopack
+        shell: pwsh
+        run: |
+          vpk pack `
+            --packId TikTokLiveAutoLiker `
+            --packVersion ${{ steps.ver.outputs.version }} `
+            --packDir publish/ `
+            --mainExe TikTokLiveAutoLiker.exe `
+            --packTitle "TikTok Live Auto Liker" `
+            --packAuthors "hexbyt3" `
+            --icon icon.ico `
+            -o releases/
+
+      - name: Upload to GitHub Releases
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          vpk upload github `
+            --repoUrl https://github.com/${{ github.repository }} `
+            --token $env:GITHUB_TOKEN `
+            --tag v${{ steps.ver.outputs.version }} `
+            --releaseName "TikTok Live Auto Liker v${{ steps.ver.outputs.version }}" `
+            --merge `
+            --publish `
+            -o releases/

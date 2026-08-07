@@ -29,6 +29,8 @@ sealed class MainForm : Form
     ComboBox _speed = null!;
     CheckBox _mute = null!, _idleBreaks = null!;
     Label _state = null!, _stats = null!;
+    Button _update = null!;
+    readonly UpdateService _updates = new();
 
     public MainForm()
     {
@@ -44,6 +46,25 @@ sealed class MainForm : Form
         _ticker.Tick += (_, _) => UpdateStats();
         _ticker.Start();
         _ = InitWebViewAsync();
+
+        _updates.UpdateReady += version =>
+        {
+            _update.Text = $"Restart for v{version}";
+            _update.Visible = true;
+        };
+        _ = _updates.RunAsync();
+    }
+
+    /// <summary>
+    /// Stops any run in progress before handing over to the updater, so a session isn't
+    /// killed mid-tap by the restart.
+    /// </summary>
+    void ApplyUpdate()
+    {
+        _update.Enabled = false;
+        _engine?.Stop();
+        SaveSettings();
+        _updates.ApplyAndRestart();
     }
 
     void BuildUi()
@@ -87,7 +108,19 @@ sealed class MainForm : Form
         var status = new Panel { Dock = DockStyle.Bottom, Height = 26 };
         _state = new Label { Location = new Point(12, 5), AutoSize = true, Text = "Starting the browser..." };
         _stats = new Label { Location = new Point(300, 5), AutoSize = true, ForeColor = SystemColors.GrayText, Text = "0 taps" };
-        status.Controls.AddRange([_state, _stats]);
+        _update = new Button
+        {
+            Text = "Restart to update",
+            Size = new Size(130, 22),
+            Visible = false
+        };
+        _update.Click += (_, _) => ApplyUpdate();
+        status.Controls.AddRange([_state, _stats, _update]);
+
+        // The panel has no real width until it is docked and laid out, so park the button
+        // against the right edge on every resize rather than trusting an initial anchor.
+        status.Resize += (_, _) =>
+            _update.Location = new Point(status.ClientSize.Width - _update.Width - 12, 2);
 
         Controls.Add(_web);
         Controls.Add(bar);
@@ -281,6 +314,7 @@ sealed class MainForm : Form
     {
         _ticker.Stop();
         _saveDebounce.Stop();
+        _updates.Dispose();
         _engine?.Stop();
         Native.UnregisterHotKey(Handle, HotkeyStart);
         Native.UnregisterHotKey(Handle, HotkeyStop);

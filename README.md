@@ -41,11 +41,26 @@ Nothing about the output is on a fixed timer:
 - **Over-tapping.** Roughly one tap in fourteen becomes a third press, the way people overshoot
   when they're mashing a like button.
 
+## Installing
+
+Grab **`TikTokLiveAutoLiker-win-Setup.exe`** from the
+[latest release](https://github.com/hexbyt3/tiktok-live-auto-liker/releases/latest). It carries
+its own runtime, so there's nothing to install first.
+
+Installed copies **update themselves**. The app checks GitHub in the background every six hours
+and downloads anything newer. It never restarts on its own — this is meant to be left running
+for hours, and pulling the rug mid-session would drop an active run — so a *Restart to update*
+button appears in the status bar and applying it is your call. Pressing it stops the current run
+cleanly first.
+
+There's also a `-win-Portable.zip` in the same release if you'd rather not install anything.
+The portable copy doesn't self-update.
+
 ## Using it
 
-1. Run `TikTokLiveAutoLiker.exe`.
+1. Run the app.
 2. Sign in to TikTok in the embedded browser. This happens once — the session is kept in
-   `%APPDATA%\TikTokLiveAutoLiker\browser` and survives restarts.
+   `%APPDATA%\TikTokLiveAutoLiker\browser` and survives restarts and updates.
 3. Paste the LIVE URL into the address bar and press **Load**.
 4. Press **Start** (or `F6`). Press **Stop** (or `F8`) to end. Both hotkeys are global, so they
    work while another window is focused.
@@ -72,21 +87,32 @@ survive even if the app is killed rather than closed.
 ## Requirements
 
 - Windows 10/11 x64
-- [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)
 - Microsoft Edge WebView2 Runtime — already present on Windows 11 and current Windows 10
 
+The released build is self-contained, so .NET does not need to be installed.
+
 ## Building
+
+For a quick local build, a single ~2 MB framework-dependent exe (needs the
+[.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)):
 
 ```bash
 dotnet publish -c Release -o dist
 ```
 
-That produces a single ~2 MB `dist/TikTokLiveAutoLiker.exe` with the WebView2 wrapper bundled
-in. For a build that doesn't need .NET installed at all (~150 MB):
+To reproduce a release build, matching what the workflow does:
 
 ```bash
-dotnet publish -c Release -o dist -p:SelfContained=true
+dotnet tool install -g vpk --version 1.2.0
+dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=false -o publish/
+vpk pack --packId TikTokLiveAutoLiker --packVersion 1.1.0 --packDir publish/ \
+         --mainExe TikTokLiveAutoLiker.exe --icon icon.ico -o releases/
 ```
+
+The `vpk` CLI version and the `Velopack` package version in the csproj must match — bump them
+together.
+
+Releases are cut by pushing a `vX.Y.Z` tag matching `<Version>` in the csproj.
 
 ## Notes
 
