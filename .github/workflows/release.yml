@@ -1,0 +1,33 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish
+        run: dotnet publish -c Release -o dist
+
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path dist/TikTokLiveAutoLiker.exe -DestinationPath TikTokLiveAutoLiker-${{ github.ref_name }}.zip
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/TikTokLiveAutoLiker.exe
+            TikTokLiveAutoLiker-${{ github.ref_name }}.zip
+          generate_release_notes: true
